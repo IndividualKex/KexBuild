@@ -1,5 +1,6 @@
 using Unity.Entities;
 using Unity.Collections;
+using UnityEngine;
 
 namespace KexBuild {
     public partial class InitializationSystem : SystemBase {
@@ -24,7 +25,13 @@ namespace KexBuild {
                 _initialized = true;
             }
 
-            UnityEngine.Debug.Log("Initializing runtime");
+            var duplicationMaterial = Resources.Load<Material>("Duplication");
+
+            var settingsEntity = ecb.CreateEntity();
+            ecb.AddComponent(settingsEntity, new GlobalSettings {
+                DuplicationMaterial = duplicationMaterial
+            });
+            ecb.SetName(settingsEntity, "KexBuild Global Settings");
 
             ecb.Playback(EntityManager);
         }
