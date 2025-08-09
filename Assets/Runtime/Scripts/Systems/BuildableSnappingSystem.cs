@@ -27,7 +27,7 @@ namespace KexBuild {
             var layerMaskSettings = SystemAPI.GetSingleton<LayerMaskSettings>();
             uint groundLayerMask = layerMaskSettings.GroundMask;
 
-            foreach (var buildableRW in SystemAPI.Query<RefRW<Buildable>>()) {
+            foreach (var (buildableRW, entity) in SystemAPI.Query<RefRW<Buildable>>().WithEntityAccess()) {
                 ref var buildable = ref buildableRW.ValueRW;
 
                 float3 rayOrigin = buildable.RayOrigin;
@@ -120,7 +120,7 @@ namespace KexBuild {
 
                             float distanceScore = distanceFromRay / SNAP_THRESHOLD;
                             float combinedScore = DISTANCE_WEIGHT * distanceScore + ANGLE_WEIGHT * angleScore;
-                            
+
                             float priorityMultiplier = (bPriority == 1 && pPriority == 1) ? 0.5f : 1.0f;
                             float finalScore = combinedScore * priorityMultiplier;
 

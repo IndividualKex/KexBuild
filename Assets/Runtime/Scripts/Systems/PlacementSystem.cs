@@ -25,6 +25,7 @@ namespace KexBuild {
                 transform.Rotation = quaternion.RotateY(math.radians(buildable.TargetYaw));
 
                 ecb.AddComponent(request.BuildableEntity, new PlacedBuildable {
+                    CurrentEntity = request.BuildableEntity,
                     Definition = buildable.Definition,
                     Position = buildable.TargetPosition,
                     Yaw = buildable.TargetYaw

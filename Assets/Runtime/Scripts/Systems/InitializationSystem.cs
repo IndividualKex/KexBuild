@@ -28,11 +28,11 @@ namespace KexBuild {
                 _initialized = true;
             }
 
-            var duplicationMaterial = Resources.Load<Material>("Duplication");
+            var snapPointMaterial = Resources.Load<Material>("SnapPoint");
 
             var settingsEntity = ecb.CreateEntity();
             ecb.AddComponent(settingsEntity, new GlobalSettings {
-                DuplicationMaterial = duplicationMaterial
+                SnapPointMaterial = snapPointMaterial
             });
             ecb.AddComponent(settingsEntity, new LayerMaskSettings {
                 GroundMask = groundLayerMask,

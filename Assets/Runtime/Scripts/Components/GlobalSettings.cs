@@ -3,6 +3,6 @@ using UnityEngine;
 
 namespace KexBuild {
     public class GlobalSettings : IComponentData {
-        public Material DuplicationMaterial;
+        public Material SnapPointMaterial;
     }
 }
