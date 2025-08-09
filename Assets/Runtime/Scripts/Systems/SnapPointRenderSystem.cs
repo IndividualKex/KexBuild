@@ -31,6 +31,7 @@ namespace KexBuild {
             CreateQuadMesh();
 
             RequireForUpdate<GlobalSettings>();
+            RequireForUpdate<SnapPointSettings>();
         }
 
         protected override void OnDestroy() {
@@ -55,30 +56,51 @@ namespace KexBuild {
             const float ALIGNMENT_THRESHOLD = 0.01f;
 
             var snapLookup = SystemAPI.GetBufferLookup<SnapPosition>(true);
+            var snapPointSettings = SystemAPI.GetSingleton<SnapPointSettings>();
+            
+            if (snapPointSettings.Mode == SnapMode.None) return;
 
-            // First, collect all world positions of snap points to find alignments
+            // Find alignments only between buildables and placed buildables
             var alignedPoints = new NativeHashSet<float3>(256, Allocator.Temp);
-            var allSnapPoints = new NativeList<float3>(256, Allocator.Temp);
+            var buildableSnapPoints = new NativeList<float3>(256, Allocator.Temp);
+            var buildablePositions = new NativeList<float3>(32, Allocator.Temp);
+            const float NEARBY_DISTANCE = 5.0f; // Only show snap points within this distance
 
-            // Collect all buildable snap points
+            // Collect all buildable snap points and positions
             foreach (var buildable in SystemAPI.Query<Buildable>()) {
                 if (buildable.Definition == Entity.Null || !snapLookup.HasBuffer(buildable.Definition)) continue;
 
+                buildablePositions.Add(buildable.TargetPosition);
                 var buf = snapLookup[buildable.Definition];
                 quaternion yaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
 
                 for (int i = 0; i < buf.Length; i++) {
                     var snapPoint = buf[i];
                     int3 cell = snapPoint.Value;
+                    byte priority = snapPoint.Priority;
+                    
+                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
+                    
                     float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
                     float3 world = buildable.TargetPosition + math.rotate(yaw, local);
-                    allSnapPoints.Add(world);
+                    buildableSnapPoints.Add(world);
                 }
             }
 
-            // Collect all placed buildable snap points
+            // Check for alignments with placed buildables (only near buildables)
             foreach (var placed in SystemAPI.Query<PlacedBuildable>()) {
                 if (placed.Definition == Entity.Null || !snapLookup.HasBuffer(placed.Definition)) continue;
+
+                // Check if this placed buildable is near any active buildable
+                bool isNearBuildable = false;
+                for (int b = 0; b < buildablePositions.Length; b++) {
+                    if (math.distance(placed.Position, buildablePositions[b]) < NEARBY_DISTANCE) {
+                        isNearBuildable = true;
+                        break;
+                    }
+                }
+                
+                if (!isNearBuildable) continue;
 
                 var buf = snapLookup[placed.Definition];
                 quaternion yaw = quaternion.RotateY(math.radians(placed.Yaw));
@@ -86,18 +108,19 @@ namespace KexBuild {
                 for (int i = 0; i < buf.Length; i++) {
                     var snapPoint = buf[i];
                     int3 cell = snapPoint.Value;
+                    byte priority = snapPoint.Priority;
+                    
+                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
+                    
                     float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
-                    float3 world = placed.Position + math.rotate(yaw, local);
-                    allSnapPoints.Add(world);
-                }
-            }
-
-            // Find aligned points
-            for (int i = 0; i < allSnapPoints.Length; i++) {
-                for (int j = i + 1; j < allSnapPoints.Length; j++) {
-                    if (math.distance(allSnapPoints[i], allSnapPoints[j]) < ALIGNMENT_THRESHOLD) {
-                        alignedPoints.Add(allSnapPoints[i]);
-                        alignedPoints.Add(allSnapPoints[j]);
+                    float3 placedWorld = placed.Position + math.rotate(yaw, local);
+                    
+                    // Check if this placed snap point aligns with any buildable snap point
+                    for (int j = 0; j < buildableSnapPoints.Length; j++) {
+                        if (math.distance(placedWorld, buildableSnapPoints[j]) < ALIGNMENT_THRESHOLD) {
+                            alignedPoints.Add(placedWorld);
+                            alignedPoints.Add(buildableSnapPoints[j]);
+                        }
                     }
                 }
             }
@@ -113,6 +136,9 @@ namespace KexBuild {
                     var snapPoint = buf[i];
                     int3 cell = snapPoint.Value;
                     byte priority = snapPoint.Priority;
+                    
+                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
+                    
                     float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
                     float3 world = buildable.TargetPosition + math.rotate(yaw, local);
 
@@ -123,9 +149,20 @@ namespace KexBuild {
                 }
             }
 
-            // Draw placed buildable snap points
+            // Draw placed buildable snap points (only if near an active buildable)
             foreach (var placed in SystemAPI.Query<PlacedBuildable>()) {
                 if (placed.Definition == Entity.Null || !snapLookup.HasBuffer(placed.Definition)) continue;
+
+                // Check if this placed buildable is near any active buildable
+                bool isNearBuildable = false;
+                for (int b = 0; b < buildablePositions.Length; b++) {
+                    if (math.distance(placed.Position, buildablePositions[b]) < NEARBY_DISTANCE) {
+                        isNearBuildable = true;
+                        break;
+                    }
+                }
+                
+                if (!isNearBuildable) continue;
 
                 var buf = snapLookup[placed.Definition];
                 quaternion yaw = quaternion.RotateY(math.radians(placed.Yaw));
@@ -134,6 +171,9 @@ namespace KexBuild {
                     var snapPoint = buf[i];
                     int3 cell = snapPoint.Value;
                     byte priority = snapPoint.Priority;
+                    
+                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
+                    
                     float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
                     float3 world = placed.Position + math.rotate(yaw, local);
 
@@ -145,7 +185,8 @@ namespace KexBuild {
             }
 
             alignedPoints.Dispose();
-            allSnapPoints.Dispose();
+            buildableSnapPoints.Dispose();
+            buildablePositions.Dispose();
 
             if (_matrices.Length > 0) {
                 RenderSnapPoints(settings.SnapPointMaterial);

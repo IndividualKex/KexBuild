@@ -6,17 +6,18 @@ using static KexBuild.Constants;
 
 namespace KexBuild {
     [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(FixedStepSimulationSystemGroup))]
     [BurstCompile]
     public partial struct BuildableSnappingSystem : ISystem {
         private const float MAX_RAY_DISTANCE = 10f;
         private const float MIN_BUILD_DISTANCE = 1f;
-        private const float DISTANCE_WEIGHT = 0.7f;
-        private const float ANGLE_WEIGHT = 0.3f;
+        private const float RAY_DISTANCE_WEIGHT = 0.4f;
+        private const float ORIGIN_DISTANCE_WEIGHT = 0.4f;
+        private const float ANGLE_WEIGHT = 0.2f;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state) {
             state.RequireForUpdate<LayerMaskSettings>();
+            state.RequireForUpdate<SnapPointSettings>();
         }
 
         [BurstCompile]
@@ -25,13 +26,19 @@ namespace KexBuild {
             var collisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld;
 
             var layerMaskSettings = SystemAPI.GetSingleton<LayerMaskSettings>();
+            var snapPointSettings = SystemAPI.GetSingleton<SnapPointSettings>();
             uint groundLayerMask = layerMaskSettings.GroundMask;
+
 
             foreach (var (buildableRW, entity) in SystemAPI.Query<RefRW<Buildable>>().WithEntityAccess()) {
                 ref var buildable = ref buildableRW.ValueRW;
 
                 float3 rayOrigin = buildable.RayOrigin;
                 float3 rayDirection = buildable.RayDirection;
+
+                // Skip if ray data hasn't been initialized yet
+                if (math.lengthsq(rayDirection) < 0.01f) continue;
+
                 quaternion buildYaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
 
                 var rayInput = new RaycastInput {
@@ -49,7 +56,25 @@ namespace KexBuild {
                     defaultTarget = hit.Position;
                 }
                 else {
-                    defaultTarget = rayOrigin + rayDirection * MAX_RAY_DISTANCE;
+                    float3 farPoint = rayOrigin + rayDirection * MAX_RAY_DISTANCE;
+                    const float DOWNCAST_HEIGHT = 100f;
+
+                    var downcastInput = new RaycastInput {
+                        Start = new float3(farPoint.x, farPoint.y + DOWNCAST_HEIGHT, farPoint.z),
+                        End = new float3(farPoint.x, farPoint.y - DOWNCAST_HEIGHT, farPoint.z),
+                        Filter = new CollisionFilter {
+                            BelongsTo = ~0u,
+                            CollidesWith = groundLayerMask,
+                            GroupIndex = 0
+                        }
+                    };
+
+                    if (collisionWorld.CastRay(downcastInput, out RaycastHit groundHit)) {
+                        defaultTarget = groundHit.Position;
+                    }
+                    else {
+                        defaultTarget = new float3(farPoint.x, 0f, farPoint.z);
+                    }
                 }
 
                 float3 playerPos2D = new(rayOrigin.x, 0f, rayOrigin.z);
@@ -69,7 +94,8 @@ namespace KexBuild {
                     defaultTarget.y += yAdjustment;
                 }
 
-                if (!snapLookup.TryGetBuffer(buildable.Definition, out var buildPoints)) {
+                if (snapPointSettings.Mode == SnapMode.None ||
+                    !snapLookup.TryGetBuffer(buildable.Definition, out var buildPoints)) {
                     buildable.TargetPosition = defaultTarget;
                     continue;
                 }
@@ -92,6 +118,9 @@ namespace KexBuild {
                         var buildPoint = buildPoints[bi];
                         int3 bCell = buildPoint.Value;
                         byte bPriority = buildPoint.Priority;
+
+                        if (snapPointSettings.Mode == SnapMode.Simple && bPriority != 1) continue;
+
                         float3 bLocal = new(bCell.x * GRID_SIZE, bCell.y * GRID_SIZE, bCell.z * GRID_SIZE);
                         float3 bLocalRot = math.rotate(buildYaw, bLocal);
 
@@ -99,6 +128,9 @@ namespace KexBuild {
                             var placePoint = placePoints[pi];
                             int3 pCell = placePoint.Value;
                             byte pPriority = placePoint.Priority;
+
+                            if (snapPointSettings.Mode == SnapMode.Simple && pPriority != 1) continue;
+
                             float3 pLocal = new(pCell.x * GRID_SIZE, pCell.y * GRID_SIZE, pCell.z * GRID_SIZE);
                             float3 pWorld = placed.Position + math.rotate(placedYaw, pLocal);
 
@@ -118,8 +150,11 @@ namespace KexBuild {
                             float angleCosine = math.dot(rayDirection, dirToCandidate);
                             float angleScore = 1f - angleCosine;
 
-                            float distanceScore = distanceFromRay / SNAP_THRESHOLD;
-                            float combinedScore = DISTANCE_WEIGHT * distanceScore + ANGLE_WEIGHT * angleScore;
+                            float rayDistanceScore = distanceFromRay / SNAP_THRESHOLD;
+                            float originDistanceScore = projectionLength / MAX_RAY_DISTANCE;
+                            float combinedScore = RAY_DISTANCE_WEIGHT * rayDistanceScore +
+                                                ORIGIN_DISTANCE_WEIGHT * originDistanceScore +
+                                                ANGLE_WEIGHT * angleScore;
 
                             float priorityMultiplier = (bPriority == 1 && pPriority == 1) ? 0.5f : 1.0f;
                             float finalScore = combinedScore * priorityMultiplier;

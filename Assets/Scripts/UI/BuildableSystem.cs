@@ -1,5 +1,7 @@
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Transforms;
 using UnityEngine.InputSystem;
 
 namespace KexBuild.UI {
@@ -16,6 +18,7 @@ namespace KexBuild.UI {
             };
 
             RequireForUpdate<PrefabsSingleton>();
+            RequireForUpdate<SnapPointSettings>();
         }
 
         protected override void OnUpdate() {
@@ -35,14 +38,30 @@ namespace KexBuild.UI {
                 _current = Entity.Null;
             }
 
+            if (Keyboard.current.yKey.wasPressedThisFrame) {
+                ref var snapPointSettings = ref SystemAPI.GetSingletonRW<SnapPointSettings>().ValueRW;
+                snapPointSettings.Mode = snapPointSettings.Mode switch {
+                    SnapMode.Simple => SnapMode.Advanced,
+                    SnapMode.Advanced => SnapMode.None,
+                    SnapMode.None => SnapMode.Simple,
+                    _ => SnapMode.Simple
+                };
+            }
+
             if (Keyboard.current.digit1Key.wasPressedThisFrame) {
                 bool isCurrent = _currentIndex == 0;
                 Clear();
                 if (!isCurrent) {
                     _current = EntityManager.Instantiate(prefabs.Floor);
                     EntityManager.SetComponentData(_current, new Buildable {
-                        Definition = map[_names[0]]
+                        Definition = map[_names[0]],
+                        ResolvedTargetPosition = float3.zero,
+                        ResolvedTargetRotation = quaternion.identity,
+                        VerticalOffset = 0,
+                        DepthOffset = 0,
                     });
+                    ref var transform = ref SystemAPI.GetComponentRW<LocalTransform>(_current).ValueRW;
+                    transform.Position = new float3(0, -999f, 0);
                     _currentIndex = 0;
                 }
             }
@@ -53,9 +72,44 @@ namespace KexBuild.UI {
                 if (!isCurrent) {
                     _current = EntityManager.Instantiate(prefabs.Wall);
                     EntityManager.SetComponentData(_current, new Buildable {
-                        Definition = map[_names[1]]
+                        Definition = map[_names[1]],
+                        ResolvedTargetPosition = float3.zero,
+                        ResolvedTargetRotation = quaternion.identity,
+                        VerticalOffset = 0,
+                        DepthOffset = 0,
                     });
+                    ref var transform = ref SystemAPI.GetComponentRW<LocalTransform>(_current).ValueRW;
+                    transform.Position = new float3(0, -999f, 0);
                     _currentIndex = 1;
+                }
+            }
+
+            var scrollDelta = Mouse.current.scroll.ReadValue().y;
+            if (scrollDelta != 0f) {
+                bool ctrlHeld = Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed;
+                bool altHeld = Keyboard.current.leftAltKey.isPressed || Keyboard.current.rightAltKey.isPressed;
+
+                foreach (var buildableRW in SystemAPI.Query<RefRW<Buildable>>()) {
+                    ref var buildable = ref buildableRW.ValueRW;
+
+                    if (ctrlHeld) {
+                        buildable.VerticalOffset += scrollDelta > 0 ? 1 : -1;
+                        buildable.VerticalOffset = math.clamp(buildable.VerticalOffset, -10, 10);
+                    }
+                    else if (altHeld) {
+                        buildable.DepthOffset += scrollDelta > 0 ? 1 : -1;
+                        buildable.DepthOffset = math.clamp(buildable.DepthOffset, -10, 10);
+                    }
+                    else {
+                        buildable.TargetYaw += scrollDelta > 0 ? 15f : -15f;
+
+                        while (buildable.TargetYaw < 0f) {
+                            buildable.TargetYaw += 360f;
+                        }
+                        while (buildable.TargetYaw >= 360f) {
+                            buildable.TargetYaw -= 360f;
+                        }
+                    }
                 }
             }
 

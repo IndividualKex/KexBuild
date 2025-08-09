@@ -1,11 +1,11 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 using Unity.Transforms;
 
 namespace KexBuild {
     [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(BuildableUpdateSystem))]
     [BurstCompile]
     public partial struct PlacementSystem : ISystem {
         [BurstCompile]
@@ -21,13 +21,13 @@ namespace KexBuild {
                 var buildable = SystemAPI.GetComponent<Buildable>(request.BuildableEntity);
                 ref var transform = ref SystemAPI.GetComponentRW<LocalTransform>(request.BuildableEntity).ValueRW;
 
-                transform.Position = buildable.TargetPosition;
-                transform.Rotation = quaternion.RotateY(math.radians(buildable.TargetYaw));
+                transform.Position = buildable.ResolvedTargetPosition;
+                transform.Rotation = buildable.ResolvedTargetRotation;
 
                 ecb.AddComponent(request.BuildableEntity, new PlacedBuildable {
                     CurrentEntity = request.BuildableEntity,
                     Definition = buildable.Definition,
-                    Position = buildable.TargetPosition,
+                    Position = buildable.ResolvedTargetPosition,
                     Yaw = buildable.TargetYaw
                 });
 

@@ -7,6 +7,10 @@ namespace KexBuild {
         public float3 RayOrigin;
         public float3 RayDirection;
         public float3 TargetPosition;
+        public float3 ResolvedTargetPosition;
+        public quaternion ResolvedTargetRotation;
         public float TargetYaw;
+        public int VerticalOffset;
+        public int DepthOffset;
     }
 }

@@ -37,6 +37,9 @@ namespace KexBuild {
             ecb.AddComponent(settingsEntity, new LayerMaskSettings {
                 GroundMask = groundLayerMask,
             });
+            ecb.AddComponent(settingsEntity, new SnapPointSettings {
+                Mode = SnapMode.Simple,
+            });
             ecb.SetName(settingsEntity, "KexBuild Global Settings");
 
             ecb.Playback(EntityManager);

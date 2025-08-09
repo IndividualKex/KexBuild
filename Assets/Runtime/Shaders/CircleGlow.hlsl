@@ -8,17 +8,19 @@ void CircleGlow_float(
     float dist = distance(uv, center);
     
     bool isAligned = visualizationData.x > 0.5;
+    bool isPrimary = visualizationData.y > 0.5;
     
     float3 unalignedColor = float3(1.0, 1.0, 0.0);
     
-    float targetRadius = 0.25;
-    float ringThickness = 0.05;
+    float sizeMultiplier = isPrimary ? 1.0 : 0.5;
+    float targetRadius = 0.25 * sizeMultiplier;
+    float ringThickness = 0.08 * sizeMultiplier;
     
     float ringDistance = abs(dist - targetRadius);
     float ringMask = 1.0 - smoothstep(0.0, ringThickness * 0.5, ringDistance);
     
     float ringIntensity = ringMask * 1.2;
-    float ringAlpha = ringMask * 0.4;
+    float ringAlpha = ringMask * 0.5;
     
     Color = unalignedColor * ringIntensity;
     Alpha = ringAlpha;
@@ -26,8 +28,8 @@ void CircleGlow_float(
     if (isAligned) {
         float3 alignedColor = float3(0.2, 0.5, 1.0);
         
-        float innerRadius = 0.08;
-        float outerRadius = 0.35;
+        float innerRadius = 0.08 * sizeMultiplier;
+        float outerRadius = 0.35 * sizeMultiplier;
         
         float innerCircle = 1.0 - smoothstep(0.0, innerRadius, dist);
         float outerGlow = 1.0 - smoothstep(innerRadius, outerRadius, dist);

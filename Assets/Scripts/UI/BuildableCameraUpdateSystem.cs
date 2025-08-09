@@ -2,9 +2,9 @@ using Unity.Entities;
 using Unity.Mathematics;
 
 namespace KexBuild.UI {
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(FirstPersonPlayerFixedStepControlSystem))]
-    public partial class BuildableFixedUpdateSystem : SystemBase {
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateBefore(typeof(BuildableSnappingSystem))]
+    public partial class BuildableCameraUpdateSystem : SystemBase {
         private UnityEngine.Transform _camera;
 
         protected override void OnCreate() {
