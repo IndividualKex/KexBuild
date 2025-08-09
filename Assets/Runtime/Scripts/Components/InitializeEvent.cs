@@ -1,5 +1,8 @@
 using Unity.Entities;
+using UnityEngine;
 
 namespace KexBuild {
-    public struct InitializeEvent : IComponentData { }
+    public class InitializeEvent : IComponentData {
+        public LayerMask GroundLayerMask;
+    }
 }

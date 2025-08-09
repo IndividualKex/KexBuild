@@ -15,12 +15,17 @@ namespace KexBuild {
         private const float ANGLE_WEIGHT = 0.3f;
 
         [BurstCompile]
+        public void OnCreate(ref SystemState state) {
+            state.RequireForUpdate<LayerMaskSettings>();
+        }
+
+        [BurstCompile]
         public void OnUpdate(ref SystemState state) {
             var snapLookup = SystemAPI.GetBufferLookup<SnapPosition>(true);
             var collisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld;
 
-            uint groundLayerMask = 1u << 6;
-            uint buildableLayerMask = 1u << 7;
+            var layerMaskSettings = SystemAPI.GetSingleton<LayerMaskSettings>();
+            uint groundLayerMask = layerMaskSettings.GroundMask;
 
             foreach (var buildableRW in SystemAPI.Query<RefRW<Buildable>>()) {
                 ref var buildable = ref buildableRW.ValueRW;
@@ -34,7 +39,7 @@ namespace KexBuild {
                     End = rayOrigin + rayDirection * MAX_RAY_DISTANCE,
                     Filter = new CollisionFilter {
                         BelongsTo = ~0u,
-                        CollidesWith = groundLayerMask | buildableLayerMask,
+                        CollidesWith = groundLayerMask,
                         GroupIndex = 0
                     }
                 };

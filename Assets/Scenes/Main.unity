@@ -580,6 +580,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 866baee006822a746b895fdd9869ee75, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  GroundLayerMask:
+    serializedVersion: 2
+    m_Bits: 128
+  BuildableLayerMask:
+    serializedVersion: 2
+    m_Bits: 256
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

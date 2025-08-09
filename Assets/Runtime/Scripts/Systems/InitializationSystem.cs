@@ -17,11 +17,14 @@ namespace KexBuild {
 
             using var ecb = new EntityCommandBuffer(Allocator.Temp);
 
-            foreach (var (_, entity) in SystemAPI.Query<InitializeEvent>().WithEntityAccess()) {
+            uint groundLayerMask = 0;
+
+            foreach (var (evt, entity) in SystemAPI.Query<InitializeEvent>().WithEntityAccess()) {
                 ecb.DestroyEntity(entity);
                 if (_initialized) {
                     throw new System.Exception("Runtime already initialized");
                 }
+                groundLayerMask = (uint)evt.GroundLayerMask.value;
                 _initialized = true;
             }
 
@@ -30,6 +33,9 @@ namespace KexBuild {
             var settingsEntity = ecb.CreateEntity();
             ecb.AddComponent(settingsEntity, new GlobalSettings {
                 DuplicationMaterial = duplicationMaterial
+            });
+            ecb.AddComponent(settingsEntity, new LayerMaskSettings {
+                GroundMask = groundLayerMask,
             });
             ecb.SetName(settingsEntity, "KexBuild Global Settings");
 
