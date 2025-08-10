@@ -167,6 +167,7 @@ namespace KexBuild {
                 }
 
                 buildable.TargetPosition = foundSnap ? bestOrigin : defaultTarget;
+                buildable.Snapped = foundSnap;
             }
         }
     }

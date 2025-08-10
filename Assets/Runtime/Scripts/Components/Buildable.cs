@@ -12,5 +12,6 @@ namespace KexBuild {
         public float TargetYaw;
         public int VerticalOffset;
         public int DepthOffset;
+        public bool Snapped;
     }
 }
