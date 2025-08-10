@@ -1,8 +1,11 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
+using static KexBuild.Constants;
 
 namespace KexBuild {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
@@ -52,141 +55,50 @@ namespace KexBuild {
             _matrices.Clear();
             _visualizationData.Clear();
 
-            float cellSize = Constants.GRID_SIZE;
-            const float ALIGNMENT_THRESHOLD = 0.01f;
-
-            var snapLookup = SystemAPI.GetBufferLookup<SnapPosition>(true);
             var snapPointSettings = SystemAPI.GetSingleton<SnapPointSettings>();
-            
+
             if (snapPointSettings.Mode == SnapMode.None) return;
 
-            // Find alignments only between buildables and placed buildables
-            var alignedPoints = new NativeHashSet<float3>(256, Allocator.Temp);
-            var buildableSnapPoints = new NativeList<float3>(256, Allocator.Temp);
-            var buildablePositions = new NativeList<float3>(32, Allocator.Temp);
-            const float NEARBY_DISTANCE = 5.0f; // Only show snap points within this distance
+            var buildableQuery = SystemAPI.QueryBuilder().WithAll<Buildable>().Build();
+            var placedQuery = SystemAPI.QueryBuilder().WithAll<PlacedBuildable>().Build();
 
-            // Collect all buildable snap points and positions
+            int buildableCount = buildableQuery.CalculateEntityCount();
+            int placedCount = placedQuery.CalculateEntityCount();
+
+            if (buildableCount == 0) return;
+
+            var buildables = new NativeArray<SnapPointGatherJob.BuildableData>(buildableCount, Allocator.TempJob);
+            var placedBuildables = new NativeArray<SnapPointGatherJob.PlacedBuildableData>(placedCount, Allocator.TempJob);
+
+            int buildableIdx = 0;
             foreach (var buildable in SystemAPI.Query<Buildable>()) {
-                if (buildable.Definition == Entity.Null || !snapLookup.HasBuffer(buildable.Definition)) continue;
-
-                buildablePositions.Add(buildable.TargetPosition);
-                var buf = snapLookup[buildable.Definition];
-                quaternion yaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
-
-                for (int i = 0; i < buf.Length; i++) {
-                    var snapPoint = buf[i];
-                    int3 cell = snapPoint.Value;
-                    byte priority = snapPoint.Priority;
-                    
-                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
-                    
-                    float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
-                    float3 world = buildable.TargetPosition + math.rotate(yaw, local);
-                    buildableSnapPoints.Add(world);
-                }
+                buildables[buildableIdx++] = new SnapPointGatherJob.BuildableData {
+                    definition = buildable.Definition,
+                    position = buildable.TargetPosition,
+                    yaw = buildable.TargetYaw
+                };
             }
 
-            // Check for alignments with placed buildables (only near buildables)
+            int placedIdx = 0;
             foreach (var placed in SystemAPI.Query<PlacedBuildable>()) {
-                if (placed.Definition == Entity.Null || !snapLookup.HasBuffer(placed.Definition)) continue;
-
-                // Check if this placed buildable is near any active buildable
-                bool isNearBuildable = false;
-                for (int b = 0; b < buildablePositions.Length; b++) {
-                    if (math.distance(placed.Position, buildablePositions[b]) < NEARBY_DISTANCE) {
-                        isNearBuildable = true;
-                        break;
-                    }
-                }
-                
-                if (!isNearBuildable) continue;
-
-                var buf = snapLookup[placed.Definition];
-                quaternion yaw = quaternion.RotateY(math.radians(placed.Yaw));
-
-                for (int i = 0; i < buf.Length; i++) {
-                    var snapPoint = buf[i];
-                    int3 cell = snapPoint.Value;
-                    byte priority = snapPoint.Priority;
-                    
-                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
-                    
-                    float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
-                    float3 placedWorld = placed.Position + math.rotate(yaw, local);
-                    
-                    // Check if this placed snap point aligns with any buildable snap point
-                    for (int j = 0; j < buildableSnapPoints.Length; j++) {
-                        if (math.distance(placedWorld, buildableSnapPoints[j]) < ALIGNMENT_THRESHOLD) {
-                            alignedPoints.Add(placedWorld);
-                            alignedPoints.Add(buildableSnapPoints[j]);
-                        }
-                    }
-                }
+                placedBuildables[placedIdx++] = new SnapPointGatherJob.PlacedBuildableData {
+                    definition = placed.Definition,
+                    position = placed.Position,
+                    yaw = placed.Yaw
+                };
             }
 
-            // Draw buildable snap points
-            foreach (var buildable in SystemAPI.Query<Buildable>()) {
-                if (buildable.Definition == Entity.Null || !snapLookup.HasBuffer(buildable.Definition)) continue;
+            new SnapPointGatherJob {
+                Buildables = buildables,
+                PlacedBuildables = placedBuildables,
+                SnapLookup = SystemAPI.GetBufferLookup<SnapPosition>(true),
+                SnapMode = snapPointSettings.Mode,
+                Matrices = _matrices,
+                VisualizationData = _visualizationData
+            }.Run();
 
-                var buf = snapLookup[buildable.Definition];
-                quaternion yaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
-
-                for (int i = 0; i < buf.Length; i++) {
-                    var snapPoint = buf[i];
-                    int3 cell = snapPoint.Value;
-                    byte priority = snapPoint.Priority;
-                    
-                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
-                    
-                    float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
-                    float3 world = buildable.TargetPosition + math.rotate(yaw, local);
-
-                    bool isAligned = alignedPoints.Contains(world);
-                    bool isPrimary = priority == 1;
-
-                    AddSnapPoint(world, isAligned, isPrimary);
-                }
-            }
-
-            // Draw placed buildable snap points (only if near an active buildable)
-            foreach (var placed in SystemAPI.Query<PlacedBuildable>()) {
-                if (placed.Definition == Entity.Null || !snapLookup.HasBuffer(placed.Definition)) continue;
-
-                // Check if this placed buildable is near any active buildable
-                bool isNearBuildable = false;
-                for (int b = 0; b < buildablePositions.Length; b++) {
-                    if (math.distance(placed.Position, buildablePositions[b]) < NEARBY_DISTANCE) {
-                        isNearBuildable = true;
-                        break;
-                    }
-                }
-                
-                if (!isNearBuildable) continue;
-
-                var buf = snapLookup[placed.Definition];
-                quaternion yaw = quaternion.RotateY(math.radians(placed.Yaw));
-
-                for (int i = 0; i < buf.Length; i++) {
-                    var snapPoint = buf[i];
-                    int3 cell = snapPoint.Value;
-                    byte priority = snapPoint.Priority;
-                    
-                    if (snapPointSettings.Mode == SnapMode.Simple && priority != 1) continue;
-                    
-                    float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
-                    float3 world = placed.Position + math.rotate(yaw, local);
-
-                    bool isAligned = alignedPoints.Contains(world);
-                    bool isPrimary = priority == 1;
-
-                    AddSnapPoint(world, isAligned, isPrimary);
-                }
-            }
-
-            alignedPoints.Dispose();
-            buildableSnapPoints.Dispose();
-            buildablePositions.Dispose();
+            buildables.Dispose();
+            placedBuildables.Dispose();
 
             if (_matrices.Length > 0) {
                 RenderSnapPoints(settings.SnapPointMaterial);
@@ -196,8 +108,10 @@ namespace KexBuild {
         private void RenderSnapPoints(Material material) {
             if (_matrices.Length == 0) return;
 
-            _matricesBuffer.SetData(_matrices.AsArray(), 0, 0, _matrices.Length);
-            _visualizationBuffer.SetData(_visualizationData.AsArray(), 0, 0, _visualizationData.Length);
+            int count = math.min(_matrices.Length, MAX_SNAP_POINTS);
+
+            _matricesBuffer.SetData(_matrices.AsArray(), 0, 0, count);
+            _visualizationBuffer.SetData(_visualizationData.AsArray(), 0, 0, count);
 
             var matProps = new MaterialPropertyBlock();
             matProps.SetBuffer("_Matrices", _matricesBuffer);
@@ -211,7 +125,7 @@ namespace KexBuild {
                 receiveShadows = false
             };
 
-            var args = new uint[5] { _quadMesh.GetIndexCount(0), (uint)_matrices.Length, 0, 0, 0 };
+            var args = new uint[5] { _quadMesh.GetIndexCount(0), (uint)count, 0, 0, 0 };
             _argsBuffer.SetData(args);
 
             Graphics.RenderMeshIndirect(renderParams, _quadMesh, _argsBuffer);
@@ -244,18 +158,172 @@ namespace KexBuild {
             _quadMesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100f);
         }
 
-        private void AddSnapPoint(float3 position, bool isAligned, bool isPrimary) {
-            var matrix = float4x4.TRS(position, quaternion.identity, new float3(UNIFORM_SIZE, UNIFORM_SIZE, 1));
+        [BurstCompile]
+        private struct SnapPointGatherJob : IJob {
+            [ReadOnly] public NativeArray<BuildableData> Buildables;
+            [ReadOnly] public NativeArray<PlacedBuildableData> PlacedBuildables;
+            [ReadOnly] public BufferLookup<SnapPosition> SnapLookup;
+            public SnapMode SnapMode;
+            public NativeList<float4x4> Matrices;
+            public NativeList<float4> VisualizationData;
 
-            var data = new float4(
-                isAligned ? 1.0f : 0.0f,
-                isPrimary ? 1.0f : 0.0f,
-                0.0f,
-                0.0f
-            );
+            public struct BuildableData {
+                public Entity definition;
+                public float3 position;
+                public float yaw;
+            }
 
-            _matrices.Add(matrix);
-            _visualizationData.Add(data);
+            public struct PlacedBuildableData {
+                public Entity definition;
+                public float3 position;
+                public float yaw;
+            }
+
+            private const float ALIGNMENT_THRESHOLD = 0.01f;
+            private const float NEARBY_DISTANCE = 5.0f;
+            private const float UNIFORM_SIZE = 0.25f;
+            private const int MAX_SNAP_POINTS = 2048;
+
+            public void Execute() {
+                var alignedPoints = new NativeHashSet<float3>(256, Allocator.Temp);
+                var buildableSnapPoints = new NativeList<float3>(256, Allocator.Temp);
+                var buildablePositions = new NativeList<float3>(32, Allocator.Temp);
+
+                for (int idx = 0; idx < Buildables.Length; idx++) {
+                    var buildable = Buildables[idx];
+                    if (buildable.definition == Entity.Null || !SnapLookup.HasBuffer(buildable.definition)) continue;
+
+                    buildablePositions.Add(buildable.position);
+                    var buf = SnapLookup[buildable.definition];
+                    quaternion yaw = quaternion.RotateY(math.radians(buildable.yaw));
+
+                    for (int i = 0; i < buf.Length; i++) {
+                        var snapPoint = buf[i];
+                        int3 cell = snapPoint.Value;
+                        byte priority = snapPoint.Priority;
+
+                        if (SnapMode == SnapMode.Simple && priority != 1) continue;
+
+                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 world = buildable.position + math.rotate(yaw, local);
+                        buildableSnapPoints.Add(world);
+                    }
+                }
+
+                for (int pidx = 0; pidx < PlacedBuildables.Length; pidx++) {
+                    var placed = PlacedBuildables[pidx];
+                    if (placed.definition == Entity.Null || !SnapLookup.HasBuffer(placed.definition)) continue;
+
+                    bool isNearBuildable = false;
+                    for (int b = 0; b < buildablePositions.Length; b++) {
+                        if (math.distance(placed.position, buildablePositions[b]) < NEARBY_DISTANCE) {
+                            isNearBuildable = true;
+                            break;
+                        }
+                    }
+
+                    if (!isNearBuildable) continue;
+
+                    var buf = SnapLookup[placed.definition];
+                    quaternion yaw = quaternion.RotateY(math.radians(placed.yaw));
+
+                    for (int i = 0; i < buf.Length; i++) {
+                        var snapPoint = buf[i];
+                        int3 cell = snapPoint.Value;
+                        byte priority = snapPoint.Priority;
+
+                        if (SnapMode == SnapMode.Simple && priority != 1) continue;
+
+                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 placedWorld = placed.position + math.rotate(yaw, local);
+
+                        for (int j = 0; j < buildableSnapPoints.Length; j++) {
+                            if (math.distance(placedWorld, buildableSnapPoints[j]) < ALIGNMENT_THRESHOLD) {
+                                alignedPoints.Add(placedWorld);
+                                alignedPoints.Add(buildableSnapPoints[j]);
+                            }
+                        }
+                    }
+                }
+
+                for (int idx = 0; idx < Buildables.Length; idx++) {
+                    var buildable = Buildables[idx];
+                    if (buildable.definition == Entity.Null || !SnapLookup.HasBuffer(buildable.definition)) continue;
+
+                    var buf = SnapLookup[buildable.definition];
+                    quaternion yaw = quaternion.RotateY(math.radians(buildable.yaw));
+
+                    for (int i = 0; i < buf.Length; i++) {
+                        var snapPoint = buf[i];
+                        int3 cell = snapPoint.Value;
+                        byte priority = snapPoint.Priority;
+
+                        if (SnapMode == SnapMode.Simple && priority != 1) continue;
+
+                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 world = buildable.position + math.rotate(yaw, local);
+
+                        bool isAligned = alignedPoints.Contains(world);
+                        bool isPrimary = priority == 1;
+
+                        AddSnapPoint(world, isAligned, isPrimary);
+                    }
+                }
+
+                for (int pidx = 0; pidx < PlacedBuildables.Length; pidx++) {
+                    var placed = PlacedBuildables[pidx];
+                    if (placed.definition == Entity.Null || !SnapLookup.HasBuffer(placed.definition)) continue;
+
+                    bool isNearBuildable = false;
+                    for (int b = 0; b < buildablePositions.Length; b++) {
+                        if (math.distance(placed.position, buildablePositions[b]) < NEARBY_DISTANCE) {
+                            isNearBuildable = true;
+                            break;
+                        }
+                    }
+
+                    if (!isNearBuildable) continue;
+
+                    var buf = SnapLookup[placed.definition];
+                    quaternion yaw = quaternion.RotateY(math.radians(placed.yaw));
+
+                    for (int i = 0; i < buf.Length; i++) {
+                        var snapPoint = buf[i];
+                        int3 cell = snapPoint.Value;
+                        byte priority = snapPoint.Priority;
+
+                        if (SnapMode == SnapMode.Simple && priority != 1) continue;
+
+                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 world = placed.position + math.rotate(yaw, local);
+
+                        bool isAligned = alignedPoints.Contains(world);
+                        bool isPrimary = priority == 1;
+
+                        AddSnapPoint(world, isAligned, isPrimary);
+                    }
+                }
+
+                alignedPoints.Dispose();
+                buildableSnapPoints.Dispose();
+                buildablePositions.Dispose();
+            }
+
+            private void AddSnapPoint(float3 position, bool isAligned, bool isPrimary) {
+                if (Matrices.Length >= MAX_SNAP_POINTS) return;
+
+                var matrix = float4x4.TRS(position, quaternion.identity, new float3(UNIFORM_SIZE, UNIFORM_SIZE, 1));
+
+                var data = new float4(
+                    isAligned ? 1.0f : 0.0f,
+                    isPrimary ? 1.0f : 0.0f,
+                    0.0f,
+                    0.0f
+                );
+
+                Matrices.Add(matrix);
+                VisualizationData.Add(data);
+            }
         }
     }
 }

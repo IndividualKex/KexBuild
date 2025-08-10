@@ -32,7 +32,7 @@ namespace KexBuild {
                 float3 snapAxis = useForward ?
                     localForward * math.sign(math.dot(cameraForwardXZ, localForward)) :
                     localRight * math.sign(math.dot(cameraForwardXZ, localRight));
-                float3 depthAdjustment = snapAxis * buildable.DepthOffset * GRID_SIZE;
+                float3 depthAdjustment = buildable.DepthOffset * GRID_SIZE * snapAxis;
                 resolvedPosition += depthAdjustment;
 
                 buildable.ResolvedTargetPosition = resolvedPosition;

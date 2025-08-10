@@ -29,14 +29,12 @@ namespace KexBuild {
             var snapPointSettings = SystemAPI.GetSingleton<SnapPointSettings>();
             uint groundLayerMask = layerMaskSettings.GroundMask;
 
-
             foreach (var (buildableRW, entity) in SystemAPI.Query<RefRW<Buildable>>().WithEntityAccess()) {
                 ref var buildable = ref buildableRW.ValueRW;
 
                 float3 rayOrigin = buildable.RayOrigin;
                 float3 rayDirection = buildable.RayDirection;
 
-                // Skip if ray data hasn't been initialized yet
                 if (math.lengthsq(rayDirection) < 0.01f) continue;
 
                 quaternion buildYaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
