@@ -2,7 +2,6 @@ using Unity.Entities;
 using Unity.Burst;
 using Unity.Mathematics;
 using Unity.Transforms;
-using static KexBuild.Constants;
 
 namespace KexBuild {
     [UpdateInGroup(typeof(SimulationSystemGroup))]
@@ -10,7 +9,15 @@ namespace KexBuild {
     [BurstCompile]
     public partial struct BuildableUpdateSystem : ISystem {
         [BurstCompile]
+        public void OnCreate(ref SystemState state) {
+            state.RequireForUpdate<SnapSettings>();
+        }
+
+        [BurstCompile]
         public void OnUpdate(ref SystemState state) {
+            var snapSettings = SystemAPI.GetSingleton<SnapSettings>();
+            float gridSize = snapSettings.GridSize;
+
             float deltaTime = SystemAPI.Time.DeltaTime;
             float t = math.saturate(deltaTime * 30f);
             foreach (var (buildableRW, transformRW) in SystemAPI.Query<RefRW<Buildable>, RefRW<LocalTransform>>()) {
@@ -18,7 +25,7 @@ namespace KexBuild {
                 ref var transform = ref transformRW.ValueRW;
 
                 float3 resolvedPosition = buildable.TargetPosition;
-                resolvedPosition.y += buildable.VerticalOffset * GRID_SIZE;
+                resolvedPosition.y += buildable.VerticalOffset * gridSize;
 
                 quaternion buildYaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
                 float3 localForward = math.rotate(buildYaw, new float3(0, 0, 1));
@@ -32,7 +39,7 @@ namespace KexBuild {
                 float3 snapAxis = useForward ?
                     localForward * math.sign(math.dot(cameraForwardXZ, localForward)) :
                     localRight * math.sign(math.dot(cameraForwardXZ, localRight));
-                float3 depthAdjustment = buildable.DepthOffset * GRID_SIZE * snapAxis;
+                float3 depthAdjustment = buildable.DepthOffset * gridSize * snapAxis;
                 resolvedPosition += depthAdjustment;
 
                 buildable.ResolvedTargetPosition = resolvedPosition;

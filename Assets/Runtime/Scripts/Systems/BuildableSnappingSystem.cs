@@ -2,7 +2,6 @@ using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
-using static KexBuild.Constants;
 
 namespace KexBuild {
     [UpdateInGroup(typeof(SimulationSystemGroup))]
@@ -17,7 +16,7 @@ namespace KexBuild {
         [BurstCompile]
         public void OnCreate(ref SystemState state) {
             state.RequireForUpdate<LayerMaskSettings>();
-            state.RequireForUpdate<SnapPointSettings>();
+            state.RequireForUpdate<SnapSettings>();
         }
 
         [BurstCompile]
@@ -26,8 +25,9 @@ namespace KexBuild {
             var collisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld;
 
             var layerMaskSettings = SystemAPI.GetSingleton<LayerMaskSettings>();
-            var snapPointSettings = SystemAPI.GetSingleton<SnapPointSettings>();
+            var snapPointSettings = SystemAPI.GetSingleton<SnapSettings>();
             uint groundLayerMask = layerMaskSettings.GroundMask;
+            float gridSize = snapPointSettings.GridSize;
 
             foreach (var (buildableRW, entity) in SystemAPI.Query<RefRW<Buildable>>().WithEntityAccess()) {
                 ref var buildable = ref buildableRW.ValueRW;
@@ -119,7 +119,7 @@ namespace KexBuild {
 
                         if (snapPointSettings.Mode == SnapMode.Simple && bPriority != 1) continue;
 
-                        float3 bLocal = new(bCell.x * GRID_SIZE, bCell.y * GRID_SIZE, bCell.z * GRID_SIZE);
+                        float3 bLocal = new(bCell.x * gridSize, bCell.y * gridSize, bCell.z * gridSize);
                         float3 bLocalRot = math.rotate(buildYaw, bLocal);
 
                         for (int pi = 0; pi < placePoints.Length; pi++) {
@@ -129,7 +129,7 @@ namespace KexBuild {
 
                             if (snapPointSettings.Mode == SnapMode.Simple && pPriority != 1) continue;
 
-                            float3 pLocal = new(pCell.x * GRID_SIZE, pCell.y * GRID_SIZE, pCell.z * GRID_SIZE);
+                            float3 pLocal = new(pCell.x * gridSize, pCell.y * gridSize, pCell.z * gridSize);
                             float3 pWorld = placed.Position + math.rotate(placedYaw, pLocal);
 
                             float3 originCandidate = pWorld - bLocalRot;
@@ -142,13 +142,13 @@ namespace KexBuild {
                             float3 closestPointOnRay = rayOrigin + rayDirection * projectionLength;
                             float distanceFromRay = math.distance(closestPointOnRay, originCandidate);
 
-                            if (distanceFromRay > SNAP_THRESHOLD) continue;
+                            if (distanceFromRay > gridSize) continue;
 
                             float3 dirToCandidate = math.normalize(toCandidate);
                             float angleCosine = math.dot(rayDirection, dirToCandidate);
                             float angleScore = 1f - angleCosine;
 
-                            float rayDistanceScore = distanceFromRay / SNAP_THRESHOLD;
+                            float rayDistanceScore = distanceFromRay / gridSize;
                             float originDistanceScore = projectionLength / MAX_RAY_DISTANCE;
                             float combinedScore = RAY_DISTANCE_WEIGHT * rayDistanceScore +
                                                 ORIGIN_DISTANCE_WEIGHT * originDistanceScore +

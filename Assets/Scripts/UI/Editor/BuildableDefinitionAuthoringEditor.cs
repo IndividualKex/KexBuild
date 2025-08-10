@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
-using static KexBuild.Constants;
 
 namespace KexBuild.UI {
     [CustomEditor(typeof(BuildableDefinitionAuthoring))]
     public class BuildableDefinitionAuthoringEditor : Editor {
+        private const float GRID_SIZE = 0.5f;
 
         public override void OnInspectorGUI() {
             DrawDefaultInspector();

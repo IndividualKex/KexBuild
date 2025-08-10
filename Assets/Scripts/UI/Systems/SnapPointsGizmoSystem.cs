@@ -2,15 +2,18 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
-using static KexBuild.Constants;
 
 namespace KexBuild.UI {
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(BuildableSnappingSystem))]
     public partial class SnapPointsGizmoSystem : SystemBase {
+        protected override void OnCreate() {
+            RequireForUpdate<SnapSettings>();
+        }
+
         protected override void OnUpdate() {
-            float cellSize = GRID_SIZE;
-            float half = math.max(0.025f, cellSize * 0.15f);
+            var snapSettings = SystemAPI.GetSingleton<SnapSettings>();
+            float gridSize = snapSettings.GridSize;
+
+            float half = math.max(0.025f, gridSize * 0.15f);
             const float duration = 0.1f;
             const float MAX_RAY_DISTANCE = 10f;
 
@@ -41,7 +44,7 @@ namespace KexBuild.UI {
                         var snapPoint = buf[i];
                         int3 cell = snapPoint.Value;
                         byte priority = snapPoint.Priority;
-                        float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
+                        float3 local = new(cell.x * gridSize, cell.y * gridSize, cell.z * gridSize);
                         float3 world = targetPosition + math.rotate(yaw, local);
 
                         Color color = priority == 1 ? primaryBuildableColor : secondaryBuildableColor;
@@ -73,7 +76,7 @@ namespace KexBuild.UI {
                         var snapPoint = pbuf[i];
                         int3 cell = snapPoint.Value;
                         byte priority = snapPoint.Priority;
-                        float3 local = new(cell.x * cellSize, cell.y * cellSize, cell.z * cellSize);
+                        float3 local = new(cell.x * gridSize, cell.y * gridSize, cell.z * gridSize);
                         float3 world = placed.Position + math.rotate(pYaw, local);
 
                         Color color = priority == 1 ? primaryPlacedColor : secondaryPlacedColor;

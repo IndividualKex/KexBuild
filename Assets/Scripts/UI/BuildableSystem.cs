@@ -18,7 +18,7 @@ namespace KexBuild.UI {
             };
 
             RequireForUpdate<PrefabsSingleton>();
-            RequireForUpdate<SnapPointSettings>();
+            RequireForUpdate<SnapSettings>();
         }
 
         protected override void OnUpdate() {
@@ -39,7 +39,7 @@ namespace KexBuild.UI {
             }
 
             if (Keyboard.current.yKey.wasPressedThisFrame) {
-                ref var snapPointSettings = ref SystemAPI.GetSingletonRW<SnapPointSettings>().ValueRW;
+                ref var snapPointSettings = ref SystemAPI.GetSingletonRW<SnapSettings>().ValueRW;
                 snapPointSettings.Mode = snapPointSettings.Mode switch {
                     SnapMode.Simple => SnapMode.Advanced,
                     SnapMode.Advanced => SnapMode.None,

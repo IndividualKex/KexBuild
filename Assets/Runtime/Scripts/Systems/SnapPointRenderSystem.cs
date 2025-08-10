@@ -5,7 +5,6 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
-using static KexBuild.Constants;
 
 namespace KexBuild {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
@@ -34,7 +33,7 @@ namespace KexBuild {
             CreateQuadMesh();
 
             RequireForUpdate<GlobalSettings>();
-            RequireForUpdate<SnapPointSettings>();
+            RequireForUpdate<SnapSettings>();
         }
 
         protected override void OnDestroy() {
@@ -55,7 +54,7 @@ namespace KexBuild {
             _matrices.Clear();
             _visualizationData.Clear();
 
-            var snapPointSettings = SystemAPI.GetSingleton<SnapPointSettings>();
+            var snapPointSettings = SystemAPI.GetSingleton<SnapSettings>();
 
             if (snapPointSettings.Mode == SnapMode.None) return;
 
@@ -93,8 +92,9 @@ namespace KexBuild {
                 PlacedBuildables = placedBuildables,
                 SnapLookup = SystemAPI.GetBufferLookup<SnapPosition>(true),
                 SnapMode = snapPointSettings.Mode,
+                GridSize = snapPointSettings.GridSize,
                 Matrices = _matrices,
-                VisualizationData = _visualizationData
+                VisualizationData = _visualizationData,
             }.Run();
 
             buildables.Dispose();
@@ -164,6 +164,7 @@ namespace KexBuild {
             [ReadOnly] public NativeArray<PlacedBuildableData> PlacedBuildables;
             [ReadOnly] public BufferLookup<SnapPosition> SnapLookup;
             public SnapMode SnapMode;
+            public float GridSize;
             public NativeList<float4x4> Matrices;
             public NativeList<float4> VisualizationData;
 
@@ -204,7 +205,7 @@ namespace KexBuild {
 
                         if (SnapMode == SnapMode.Simple && priority != 1) continue;
 
-                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 local = new(cell.x * GridSize, cell.y * GridSize, cell.z * GridSize);
                         float3 world = buildable.position + math.rotate(yaw, local);
                         buildableSnapPoints.Add(world);
                     }
@@ -234,7 +235,7 @@ namespace KexBuild {
 
                         if (SnapMode == SnapMode.Simple && priority != 1) continue;
 
-                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 local = new(cell.x * GridSize, cell.y * GridSize, cell.z * GridSize);
                         float3 placedWorld = placed.position + math.rotate(yaw, local);
 
                         for (int j = 0; j < buildableSnapPoints.Length; j++) {
@@ -260,7 +261,7 @@ namespace KexBuild {
 
                         if (SnapMode == SnapMode.Simple && priority != 1) continue;
 
-                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 local = new(cell.x * GridSize, cell.y * GridSize, cell.z * GridSize);
                         float3 world = buildable.position + math.rotate(yaw, local);
 
                         bool isAligned = alignedPoints.Contains(world);
@@ -294,7 +295,7 @@ namespace KexBuild {
 
                         if (SnapMode == SnapMode.Simple && priority != 1) continue;
 
-                        float3 local = new(cell.x * GRID_SIZE, cell.y * GRID_SIZE, cell.z * GRID_SIZE);
+                        float3 local = new(cell.x * GridSize, cell.y * GridSize, cell.z * GridSize);
                         float3 world = placed.position + math.rotate(yaw, local);
 
                         bool isAligned = alignedPoints.Contains(world);

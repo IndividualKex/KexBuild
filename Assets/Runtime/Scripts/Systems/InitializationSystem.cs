@@ -18,6 +18,7 @@ namespace KexBuild {
             using var ecb = new EntityCommandBuffer(Allocator.Temp);
 
             uint groundLayerMask = 0;
+            float gridSize = 0;
 
             foreach (var (evt, entity) in SystemAPI.Query<InitializeEvent>().WithEntityAccess()) {
                 ecb.DestroyEntity(entity);
@@ -25,6 +26,7 @@ namespace KexBuild {
                     throw new System.Exception("Runtime already initialized");
                 }
                 groundLayerMask = (uint)evt.GroundLayerMask.value;
+                gridSize = evt.GridSize;
                 _initialized = true;
             }
 
@@ -37,8 +39,9 @@ namespace KexBuild {
             ecb.AddComponent(settingsEntity, new LayerMaskSettings {
                 GroundMask = groundLayerMask,
             });
-            ecb.AddComponent(settingsEntity, new SnapPointSettings {
+            ecb.AddComponent(settingsEntity, new SnapSettings {
                 Mode = SnapMode.Simple,
+                GridSize = gridSize,
             });
             ecb.SetName(settingsEntity, "KexBuild Global Settings");
 
