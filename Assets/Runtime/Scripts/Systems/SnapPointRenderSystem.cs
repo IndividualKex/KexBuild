@@ -11,7 +11,6 @@ namespace KexBuild {
     public partial class SnapPointRenderSystem : SystemBase {
         private const int MAX_SNAP_POINTS = 2048;
         private const float MAX_RENDER_DISTANCE = 50f;
-        private const float UNIFORM_SIZE = 0.25f;
 
         private GraphicsBuffer _matricesBuffer;
         private GraphicsBuffer _visualizationBuffer;

@@ -29,15 +29,15 @@ namespace KexBuild {
             uint groundLayerMask = layerMaskSettings.GroundMask;
             float gridSize = snapPointSettings.GridSize;
 
-            foreach (var (buildableRW, entity) in SystemAPI.Query<RefRW<Buildable>>().WithEntityAccess()) {
-                ref var buildable = ref buildableRW.ValueRW;
+            foreach (var (buildable, entity) in SystemAPI.Query<RefRW<Buildable>>().WithEntityAccess()) {
+                ref var buildableRef = ref buildable.ValueRW;
 
-                float3 rayOrigin = buildable.RayOrigin;
-                float3 rayDirection = buildable.RayDirection;
+                float3 rayOrigin = buildableRef.RayOrigin;
+                float3 rayDirection = buildableRef.RayDirection;
 
                 if (math.lengthsq(rayDirection) < 0.01f) continue;
 
-                quaternion buildYaw = quaternion.RotateY(math.radians(buildable.TargetYaw));
+                quaternion buildYaw = quaternion.RotateY(math.radians(buildableRef.TargetYaw));
 
                 var rayInput = new RaycastInput {
                     Start = rayOrigin,
@@ -85,16 +85,16 @@ namespace KexBuild {
                     defaultTarget = new float3(newTarget2D.x, defaultTarget.y, newTarget2D.z);
                 }
 
-                if (buildable.Definition != Entity.Null &&
-                    SystemAPI.HasComponent<BuildableDefinition>(buildable.Definition)) {
-                    var def = SystemAPI.GetComponent<BuildableDefinition>(buildable.Definition);
+                if (buildableRef.Definition != Entity.Null &&
+                    SystemAPI.HasComponent<BuildableDefinition>(buildableRef.Definition)) {
+                    var def = SystemAPI.GetComponent<BuildableDefinition>(buildableRef.Definition);
                     float yAdjustment = def.Size.y * 0.5f - def.Center.y;
                     defaultTarget.y += yAdjustment;
                 }
 
                 if (snapPointSettings.Mode == SnapMode.None ||
-                    !snapLookup.TryGetBuffer(buildable.Definition, out var buildPoints)) {
-                    buildable.TargetPosition = defaultTarget;
+                    !snapLookup.TryGetBuffer(buildableRef.Definition, out var buildPoints)) {
+                    buildableRef.TargetPosition = defaultTarget;
                     continue;
                 }
 
@@ -166,8 +166,8 @@ namespace KexBuild {
                     }
                 }
 
-                buildable.TargetPosition = foundSnap ? bestOrigin : defaultTarget;
-                buildable.Snapped = foundSnap;
+                buildableRef.TargetPosition = foundSnap ? bestOrigin : defaultTarget;
+                buildableRef.Snapped = foundSnap;
             }
         }
     }

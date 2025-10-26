@@ -3,6 +3,7 @@ using Unity.Collections;
 using UnityEngine;
 
 namespace KexBuild {
+    [UpdateInGroup(typeof(InitializationSystemGroup))]
     public partial class InitializationSystem : SystemBase {
         private bool _initialized;
 
